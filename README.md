@@ -2,75 +2,117 @@
 
 ### Task 5 — Firebase Logging, Automation & Data Export
 
-> The capstone project integrating physical sensors, an ESP32, Firebase cloud services, and autonomous hysteresis logic to create a fully self-sufficient smart environment monitor.
-
 ---
 
-## 📌 Overview
-This task unites the physical hardware with the custom Firebase cloud dashboard created in Task 4. The ESP32 gathers environmental data from DHT11 and LDR sensors, logs it to the cloud, and operates an AC bulb. It supports a two-way communication model where it can be manually controlled via the dashboard or operate completely autonomously based on environmental thresholds.
+## Task Overview
+The capstone project integrating physical sensors, an ESP32, Firebase cloud services, and autonomous hysteresis logic to create a fully self-sufficient smart environment monitor. 
 
-## 🎯 Objectives
+## Problem / Purpose
+To build a complete edge-to-cloud IoT product that not only reports telemetry but makes intelligent, autonomous decisions locally while remaining configurable and monitored via a secure cloud dashboard.
+
+## Objectives
 - Wire DHT11, LDR, and Relay modules to the ESP32.
 - Integrate Firebase ESP32 Client libraries.
 - Push live telemetry (Temp, Humidity, Light) and historical logs to Firebase.
 - Implement Manual/AUTO mode toggling from the cloud.
-- Code embedded hysteresis logic to prevent relay chatter during autonomous operation.
+- Code embedded hysteresis logic to prevent relay chatter.
 
-## 🧠 Concepts Covered
+## Concepts Covered
 - Embedded Hysteresis Logic
 - Two-way Cloud Synchronization
 - Sensor Data Acquisition
 - JSON Serialization on Microcontrollers
-- Edge vs. Cloud Automation
+- Edge Computing vs Cloud Automation
 
-## 🏗️ System Architecture
-1. **Sensors**: DHT11 (GPIO 4) and LDR (GPIO 34) read physical environment data.
-2. **ESP32 Edge Node**: Processes data, applies automation logic, and syncs with Firebase over Wi-Fi.
-3. **Actuator**: Relay (GPIO 5) switches the high-voltage Bulb.
-4. **Cloud**: Firebase Realtime Database acts as the central state manager.
-5. **Dashboard**: Web UI for monitoring and manual override.
+## System Architecture
 
-## 🔧 Hardware
-- ESP32 Development Board
-- DHT11 Temperature & Humidity Sensor
-- LDR (Photoresistor) + Fixed Resistor (Voltage Divider)
-- 2-Channel Relay Module
-- 230V AC Bulb
-- Breadboard & Jumper Wires
+```text
+  [ DHT11 ]    [ LDR ]
+      \          /
+    (GPIO 4) (GPIO 34)
+        \      /
+     [ ESP32 Node ] ---(GPIO 5)---> [ Relay ] ---> [ Bulb ]
+           |
+       (Wi-Fi)
+           |
+           v
+ [ Firebase RTDB Cloud ] <---> [ Web Dashboard (Task 4) ]
+```
 
-## 💻 Software
-- Arduino IDE (C++)
-- `Firebase ESP32 Client` Library
-- `DHT sensor library`
+## Data Flow
+1. ESP32 reads sensors every 3000ms.
+2. ESP32 evaluates automation logic (if in AUTO mode) and controls the relay.
+3. ESP32 pushes live data to `/sensors`.
+4. Every 15000ms, ESP32 pushes a logged data point with a Firebase Server Timestamp to `/logs`.
+5. Dashboard instantly reflects state changes and telemetry.
 
-## ⚙️ Implementation
-- **Data Logging**: The ESP32 reads sensors every 3 seconds and pushes to `sensors/`. Every 15 seconds, it pushes a historical log entry to `logs/` using a Firebase Server Timestamp.
-- **Automation Configuration**: 
-  - **ON**: Temperature >= 30°C OR Humidity >= 70%
-  - **OFF**: Temperature <= 26°C AND Humidity < 70%
-- **Mode Switching**: The ESP32 listens to `control/mode`. If set to `MANUAL`, it obeys `control/bulb` commands from the dashboard. If `AUTO`, it uses the onboard hysteresis logic to trigger the relay.
+## Hardware
+| Component | Description |
+|-----------|-------------|
+| ESP32 | Main microcontroller |
+| DHT11 | Temperature and Humidity sensor |
+| LDR | Photoresistor for ambient light |
+| 2-Channel Relay | AC switching module |
+| 230V AC Bulb | Actuator |
 
-## 🧪 Testing
+## Software & Technologies
+| Technology | Role |
+|------------|------|
+| Arduino IDE | Firmware development |
+| `Firebase ESP32 Client` | Handles secure RTDB communication |
+| `DHT sensor library` | Parses DHT11 one-wire protocol |
+
+## Wiring / Pin Configuration
+| ESP32 Pin | Component |
+|-----------|-----------|
+| GPIO 4 | DHT11 Data |
+| GPIO 34 | LDR (Voltage Divider) |
+| GPIO 5 | Relay IN |
+
+## Configuration
+- `READ_INTERVAL_MS`: 3000 ms
+- `LOG_INTERVAL_MS`: 15000 ms
+- `LDR_DARK_THRESHOLD`: 1500
+
+## Automation Logic (Hysteresis)
+The system utilizes hysteresis to prevent mechanical relay chatter:
+- **ON Condition**: Temperature >= 30°C OR Humidity >= 70%
+- **OFF Condition**: Temperature <= 26°C AND Humidity < 70%
+*(Note: LDR is currently configured for monitoring only).*
+
+## Implementation Workflow
+The firmware establishes Wi-Fi and connects to Firebase using Legacy Token Auth. It runs two non-blocking timers: one for live updates and one for historical logging. It actively listens to changes in `/control/mode`.
+
+## Source Code Explanation
+- `task5_esp32_firebase.ino`: The main codebase. Handles sensor reading, Firebase JSON construction, and automation evaluation.
+- `Firebase.pushJSON()`: Used to append new historical records securely.
+- `Firebase.RTDB.setTimestamp()`: Injects accurate server-side timing into the logs.
+
+## Testing
 - **Manual Mode**: Verified the dashboard instantly toggled the physical bulb.
 - **Auto Mode**: Applied heat/moisture to the DHT11. Observed the bulb turn ON when thresholds were exceeded, and remain ON until values dropped past the lower hysteresis bound, preventing rapid flickering.
-- **Data Export**: Successfully downloaded hours of continuous CSV telemetry from the web dashboard.
 
-## 🛠️ Challenges & Fixes
+## Evidence
+- *Note: Complete architectural diagrams, CSV exports, and live hardware operation videos are documented in the ProtoSem weekly report.*
+
+## Challenges & Fixes
 - **Relay Chatter**: In initial tests, the bulb flickered rapidly when temperature fluctuated exactly at 30°C. Implemented Hysteresis (lower threshold at 26°C) to create a deadband, resolving the mechanical chatter.
-- **Memory Leaks**: Pushing large JSON payloads too quickly crashed the ESP32. Separated the live update loop (3s) from the historical logging loop (15s) to manage heap memory effectively.
+- **Memory Leaks**: Pushing large JSON payloads too quickly crashed the ESP32. Separated the live update loop from the historical logging loop to manage heap memory effectively.
 
-## 📚 Learning Outcomes
+## Key Learnings
 - Realized the importance of edge computing (handling automation on the ESP32) to ensure the system works even if the internet temporarily drops.
 - Mastered robust JSON handling and Firebase streaming on microcontrollers.
 
-## 💭 Reflection
+## Future Improvements
+- Integrate the LDR into the active automation logic (e.g., turn on light only if Temp is high AND it is dark).
+
+## Reflection
 This capstone task beautifully combined all the concepts learned throughout the week. It demonstrated that true IoT is not just remote control, but autonomous, data-driven systems capable of self-regulation.
 
-## 🔗 Project Information
-- **Live Login**: [https://env-monitor-845af.web.app/index.html](https://env-monitor-845af.web.app/index.html)
-- **Live Dashboard**: [https://env-monitor-845af.web.app/dashboard.html](https://env-monitor-845af.web.app/dashboard.html)
-- **Developer**: Harish Kumaran
-- **Course**: ProtoSem
+## Project Links
+- [Live Dashboard](https://env-monitor-845af.web.app/)
+- [Task 5 Implementation Code](./task5_esp32_firebase.ino)
+- Developer: Harish Kumaran (ProtoSem Week 7)
 
-## 🏁 Conclusion
-The Firebase IoT Environment Monitor is a resounding success, offering professional-grade telemetry logging, robust automation, and a highly responsive cloud interface.
+## Conclusion
+The Firebase IoT Environment Monitor is a resounding success, offering professional-grade telemetry logging, robust edge automation, and a highly responsive cloud interface.
